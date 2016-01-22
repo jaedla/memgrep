@@ -26,9 +26,11 @@ int pid;
 unsigned char *hex;
 size_t hexlen;
 map_t *maps;
+size_t read_addr;
+size_t read_len;
 
 void usage() {
-  printf("usage: memgrep pid hex\nhex example: 68656c6c6f0a\n");
+  printf("usage:\nmemgrep grep pid hex\n\texample: memgrep grep 1 68656c6c6f0a\n\nmemgrep read addr_in_hex len_in_hex\n\texample: memgrep read 1 41414140 4\n");
   exit(1);
 }
 
@@ -59,14 +61,14 @@ int parse_hex(char *str, unsigned char **hex, size_t *length) {
   *length = len;
 }
 
-void parse_args(int argc, char **argv) {
-  if (argc != 3) {
+void parse_grep_args(int argc, char **argv) {
+  if (argc != 2) {
     usage();
   }
-  if (sscanf(argv[1], "%d", &pid) != 1) {
+  if (sscanf(argv[0], "%d", &pid) != 1) {
     usage();
   }
-  parse_hex(argv[2], &hex, &hexlen);
+  parse_hex(argv[1], &hex, &hexlen);
 }
 
 int open_proc_file(char *file) {
@@ -174,6 +176,14 @@ void read_maps() {
   free(buf);
 }
 
+void checked_seek(int fd, size_t offset) {
+  off64_t ret = lseek64(fd, offset, SEEK_SET);
+  if (ret == (off64_t)-1) {
+    printf("Failed to seek mem file\n");
+    exit(1);
+  }
+}
+
 void grep() {
   map_t *map = maps;
   int fd = open_proc_file("mem");
@@ -181,11 +191,7 @@ void grep() {
     if ((map->flags & FLAG_R) && strcmp(map->file, "[vvar]")) {
       size_t size = map->end - map->start;
       unsigned char *chunk = malloc(size);
-      off64_t ret = lseek64(fd, map->start, SEEK_SET);
-      if (ret == (off64_t)-1) {
-        printf("Failed to seek mem file\n");
-        exit(1);
-      }
+      checked_seek(fd, map->start);
       size_t read = read_fd("mem", fd, chunk, size);
       if (read != size) {
         printf("Failed to read mapped memory chunk\n");
@@ -199,7 +205,7 @@ void grep() {
           }
         }
         if (j == hexlen) {
-          char *fmt = sizeof(size_t) == 4 ? "0x%08zx\n" : "0x016zx\n";
+          char *fmt = sizeof(size_t) == 4 ? "0x%08zx\n" : "0x%016zx\n";
           printf(fmt, map->start + i);
         }
       }
@@ -209,8 +215,53 @@ void grep() {
   }
 }
 
+void parse_read_args(int argc, char **argv) {
+  if (argc != 3) {
+    usage();
+  }
+  if (sscanf(argv[0], "%d", &pid) != 1) {
+    usage();
+  }
+  if (sscanf(argv[1], "%zx", &read_addr) != 1) {
+    usage();
+  }
+  if (sscanf(argv[2], "%zx", &read_len) != 1) {
+    usage();
+  }
+}
+
+void read_mem() {
+  unsigned char *mem = malloc(read_len);
+  if (!mem) {
+    printf("malloc failed\n");
+    exit(1);
+  }
+  int fd = open_proc_file("mem");
+  checked_seek(fd, read_addr);
+  size_t read = read_fd("mem", fd, mem, read_len);
+  for (size_t i = 0; i < read_len; i++) {
+    printf("%02x", mem[i]);
+  }
+  printf("\n");
+  free(mem);
+  close(fd);
+}
+
 int main(int argc, char **argv) {
-  parse_args(argc, argv);
-  read_maps();
-  grep();
+  if (argc < 2) {
+    usage();
+  }
+  char *cmd = argv[1];
+  argv += 2;
+  argc -= 2;
+  if (strcmp(cmd, "grep") == 0) {
+    parse_grep_args(argc, argv);
+    read_maps();
+    grep();
+  } else if (strcmp(cmd, "read") == 0) {
+    parse_read_args(argc, argv);
+    read_mem();
+  } else {
+    usage();
+  }
 }
