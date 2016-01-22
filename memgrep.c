@@ -137,7 +137,7 @@ void read_maps() {
       size_t unused1, unused2, unused3, unused4;
       int consumed;
       char *line = (char *)buf;
-      if (sscanf(buf, "%lx-%lx %c%c%c%c %lx %lx:%lx %ld%n",
+      if (sscanf(buf, "%zx-%zx %c%c%c%c %zx %zx:%zx %zd%n",
           &start, &end, &r, &w, &x, &p, &unused1, &unused2, &unused3, &unused4, &consumed) != 10) {
         printf("Failed to parse maps line: %s\n", line);
         exit(1);
@@ -199,7 +199,8 @@ void grep() {
           }
         }
         if (j == hexlen) {
-          printf("0x%016lx\n", map->start + i);
+          char *fmt = sizeof(size_t) == 4 ? "0x%08zx\n" : "0x016zx\n";
+          printf(fmt, map->start + i);
         }
       }
       free(chunk);
