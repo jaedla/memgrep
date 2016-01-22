@@ -27,7 +27,7 @@ unsigned char *hex;
 size_t hexlen;
 map_t *maps;
 size_t read_addr;
-size_t read_len;
+char *fmt;
 
 void usage() {
   printf("usage:\nmemgrep grep pid hex\n\texample: memgrep grep 1 68656c6c6f0a\n\nmemgrep read addr_in_hex len_in_hex\n\texample: memgrep read 1 41414140 4\n");
@@ -225,24 +225,23 @@ void parse_read_args(int argc, char **argv) {
   if (sscanf(argv[1], "%zx", &read_addr) != 1) {
     usage();
   }
-  if (sscanf(argv[2], "%zx", &read_len) != 1) {
-    usage();
-  }
+  fmt = argv[2];
 }
 
 void read_mem() {
-  unsigned char *mem = malloc(read_len);
+  unsigned char *mem = malloc(4);
   if (!mem) {
     printf("malloc failed\n");
     exit(1);
   }
   int fd = open_proc_file("mem");
   checked_seek(fd, read_addr);
-  size_t read = read_fd("mem", fd, mem, read_len);
-  for (size_t i = 0; i < read_len; i++) {
-    printf("%02x", mem[i]);
+  size_t read = read_fd("mem", fd, mem, 4);
+  if (read != 4) {
+    printf("read failed\n");
+    exit(1);
   }
-  printf("\n");
+  printf("%08x\n", *(unsigned *)mem);
   free(mem);
   close(fd);
 }
